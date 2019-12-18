@@ -1,0 +1,147 @@
+version: "3.3"
+volumes:
+  rails-app-sync:
+    external: true
+  mysql-database:
+    external: true
+services:
+  pms:
+    image: pms_docker_image
+    restart: always
+    container_name: pms
+    environment:
+      ACTIVE_RECORD_LOGGER_LEVEL: 0
+      MEMCACHE_SERVERS: 'memcached:11211'
+      PMS_HOST: 'http://pms:9000'
+    command: bash -c "source /root/.rvm/scripts/rvm && cd app && rvm use 2.1.7 && bundle install && rails s -p 9000"
+    # entrypoint: tail -f /dev/null
+    ports:
+      - "9000:9000"
+    depends_on:
+      - rabbitmq
+      - redis
+      - memcached
+      - mysql
+    volumes:
+      - rails-app-sync:/app:nocopy
+  pms-ipc:
+    image: pms_docker_image
+    restart: always
+    container_name: pms-ipc
+    environment:
+      ACTIVE_RECORD_LOGGER_LEVEL: 0
+      MEMCACHE_SERVERS: 'memcached:11211'
+      PMS_HOST: 'http://pms:9000'
+    command: bash -c "source /root/.rvm/scripts/rvm && cd app && rvm use 2.1.7 && bundle install && bundle exec unicorn -p 9001 ipc.ru"
+    # entrypoint: tail -f /dev/null
+    expose:
+      - '9001'
+    depends_on:
+      - rabbitmq
+      - redis
+      - memcached
+      - mysql
+    volumes:
+      - rails-app-sync:/app:nocopy
+  pms-resque:
+    image: pms_docker_image
+    restart: always
+    container_name: pms-resque
+    environment:
+      ACTIVE_RECORD_LOGGER_LEVEL: 0
+      MEMCACHE_SERVERS: 'memcached:11211'
+      PMS_HOST: 'http://pms:9000'
+    command: bash -c "source /root/.rvm/scripts/rvm && cd app && rvm use 2.1.7 && bundle install && bundle exec resque-pool"
+    # entrypoint: tail -f /dev/null
+    depends_on:
+      - rabbitmq
+      - redis
+      - memcached
+      - mysql
+    volumes:
+      - rails-app-sync:/app:nocopy
+  pms-resque-scheduler:
+    image: pms_docker_image
+    restart: always
+    container_name: pms-resque-scheduler
+    environment:
+      ACTIVE_RECORD_LOGGER_LEVEL: 0
+      MEMCACHE_SERVERS: 'memcached:11211'
+      PMS_HOST: 'http://pms:9000'
+    command: bash -c "source /root/.rvm/scripts/rvm && cd app && rvm use 2.1.7 && bundle install && bundle exec rake resque:scheduler"
+    depends_on:
+      - rabbitmq
+      - redis
+      - memcached
+      - mysql
+    volumes:
+      - rails-app-sync:/app:nocopy
+  pms-sneakers:
+    image: pms_docker_image
+    restart: always
+    container_name: pms-sneakers
+    environment:
+      ACTIVE_RECORD_LOGGER_LEVEL: 0
+      MEMCACHE_SERVERS: 'memcached:11211'
+      PMS_HOST: 'http://pms:9000'
+    command: bash -c "source /root/.rvm/scripts/rvm && cd app && rvm use 2.1.7 && bundle install && bundle exec rake sneakers:run"
+    depends_on:
+      - rabbitmq
+      - redis
+      - memcached
+      - mysql
+    volumes:
+      - rails-app-sync:/app:nocopy
+  pms-payments:
+    image: pms_docker_image
+    restart: always
+    container_name: pms-payments
+    environment:
+      ACTIVE_RECORD_LOGGER_LEVEL: 0
+      MEMCACHE_SERVERS: 'memcached:11211'
+      PMS_HOST: 'http://pms:9000'
+    command: bash -c "source /root/.rvm/scripts/rvm && cd app && rvm use 2.1.7 && bundle install && bundle exec rake payment_gateway:start_payment_processor"
+    depends_on:
+      - rabbitmq
+      - redis
+      - memcached
+      - mysql
+    volumes:
+      - rails-app-sync:/app:nocopy
+  mysql:
+    container_name: mysql
+    restart: always
+    image: mysql:5.6
+    environment:
+      MYSQL_ROOT_PASSWORD: ''
+      MYSQL_USER: 'root'
+      MYSQL_PASS: ''
+      MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+      MYSQL_HOST: 'localhost'
+      MYSQL_DATABASE: 'pms'
+    volumes:
+      - mysql-database:/tmp
+    ports:
+      - "3306:3306"
+    expose:
+      - '3306'
+  rabbitmq:
+    image: rabbitmq:management-alpine
+    restart: always
+    container_name: rabbitmq
+    ports:
+      - "15672:15672"
+    expose:
+      - "5672"
+  memcached:
+    image: memcached:alpine
+    restart: always
+    container_name: memcached
+    expose:
+      - '11211'
+  redis:
+    image: redis:alpine
+    restart: always
+    container_name: redis
+    expose:
+      - '6379'
